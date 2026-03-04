@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>千葉市緑区 防災情報ダッシュボード</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0f1a;
+    --surface: #0f1826;
+    --surface2: #141f30;
+    --border: #1e3050;
+    --accent: #00c8ff;
+    --accent2: #00ff9d;
+    --warn: #ffb700;
+    --danger: #ff3d3d;
+    --safe: #00e676;
+    --text: #c8dff0;
+    --text-dim: #5a7a99;
+    --font-mono: 'Share Tech Mono', monospace;
+    --font-body: 'Noto Sans JP', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 13px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── グリッドノイズ背景 ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(0,200,255,.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,200,255,.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none; z-index: 0;
+  }
+
+  /* ── ヘッダー ── */
+  header {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(10,15,26,.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 20px;
+    display: flex; align-items: center; gap: 16px;
+    height: 52px;
+  }
+  .logo {
+    font-family: var(--font-mono);
+    font-size: 17px;
+    color: var(--accent);
+    letter-spacing: .08em;
+    white-space: nowrap;
+  }
+  .logo span { color: var(--accent2); }
+  .header-sep { flex: 1; }
+  #clock {
+    font-family: var(--font-mono);
+    font-size: 13px; color: var(--text-dim);
+  }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--safe);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%,100%{ box-shadow: 0 0 0 0 rgba(0,230,118,.4); }
+    50%{ box-shadow: 0 0 0 6px rgba(0,230,118,0); }
+  }
+  .status-label { font-size: 11px; color: var(--text-dim); }
+
+  /* ── メインレイアウト ── */
+  .dashboard {
+    position: relative; z-index: 1;
+    display: grid;
+    grid-template-columns: 280px 1fr 280px;
+    grid-template-rows: auto auto 1fr;
+    gap: 10px;
+    padding: 12px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  /* ── パネル共通 ── */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    animation: fadeIn .5s ease both;
+  }
+  @keyframes fadeIn {
+    from{ opacity:0; transform:translateY(8px); }
+    to{ opacity:1; transform:translateY(0); }
+  }
+  .panel:nth-child(2){ animation-delay:.05s; }
+  .panel:nth-child(3){ animation-delay:.1s; }
+  .panel:nth-child(4){ animation-delay:.15s; }
+  .panel:nth-child(5){ animation-delay:.2s; }
+  .panel:nth-child(6){ animation-delay:.25s; }
+  .panel:nth-child(7){ animation-delay:.3s; }
+
+  .panel-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-icon { font-size: 14px; }
+  .panel-title {
+    font-size: 11px; font-weight: 500;
+    color: var(--accent); letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  .panel-badge {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 10px; color: var(--text-dim);
+  }
+  .panel-body { padding: 12px; }
+
+  /* ── アラートバナー ── */
+  .alert-bar {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px;
+    background: linear-gradient(90deg, rgba(255,183,0,.12), transparent);
+    border: 1px solid rgba(255,183,0,.3);
+    border-radius: 6px;
+    font-size: 12px;
+    animation: fadeIn .3s ease;
+  }
+  .alert-bar.safe {
+    background: linear-gradient(90deg, rgba(0,230,118,.08), transparent);
+    border-color: rgba(0,230,118,.2);
+  }
+  .alert-icon { font-size: 18px; }
+  .alert-text strong { color: var(--warn); display: block; font-size: 13px; }
+  .alert-bar.safe .alert-text strong { color: var(--safe); }
+  .alert-text span { color: var(--text-dim); }
+
+  /* ── 気象警報 ── */
+  .warning-list { display: flex; flex-direction: column; gap: 6px; }
+  .warning-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  .warning-item.active { background: rgba(255,61,61,.1); border: 1px solid rgba(255,61,61,.25); }
+  .warning-item.watch  { background: rgba(255,183,0,.1); border: 1px solid rgba(255,183,0,.25); }
+  .warning-item.clear  { background: rgba(0,230,118,.06); border: 1px solid rgba(0,230,118,.15); }
+  .wi-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .active .wi-dot { background: var(--danger); }
+  .watch  .wi-dot { background: var(--warn); }
+  .clear  .wi-dot { background: var(--safe); }
+  .wi-name { flex: 1; color: var(--text); }
+  .wi-level { font-family: var(--font-mono); font-size: 10px; }
+  .active .wi-level { color: var(--danger); }
+  .watch  .wi-level { color: var(--warn); }
+  .clear  .wi-level { color: var(--safe); }
+
+  /* ── 雨量グラフ ── */
+  .rain-chart {
+    display: flex; align-items: flex-end; gap: 3px;
+    height: 80px; padding-top: 4px;
+  }
+  .rain-bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .rain-bar {
+    width: 100%; border-radius: 2px 2px 0 0;
+    transition: height .5s ease;
+    min-height: 2px;
+  }
+  .rain-bar.low    { background: linear-gradient(180deg, #00c8ff, #0066aa); }
+  .rain-bar.mid    { background: linear-gradient(180deg, #00e676, #007744); }
+  .rain-bar.high   { background: linear-gradient(180deg, #ffb700, #aa6600); }
+  .rain-bar.danger { background: linear-gradient(180deg, #ff3d3d, #aa0000); }
+  .rain-label { font-family: var(--font-mono); font-size: 9px; color: var(--text-dim); }
+  .rain-meta {
+    display: flex; justify-content: space-between;
+    margin-top: 8px; font-family: var(--font-mono); font-size: 10px; color: var(--text-dim);
+  }
+  .rain-now { font-size: 22px; font-family: var(--font-mono); color: var(--accent); }
+  .rain-now span { font-size: 11px; color: var(--text-dim); }
+
+  /* ── 地図パネル ── */
+  .map-panel {
+    grid-column: 2;
+    grid-row: 2 / 5;
+  }
+  .map-container {
+    position: relative;
+    width: 100%;
+    height: 0;
+    padding-bottom: 75%;
+    background: var(--surface2);
+  }
+  .map-container iframe {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    border: none;
+  }
+  .map-overlay {
+    position: absolute; top: 8px; left: 8px;
+    display: flex; flex-direction: column; gap: 4px;
+    z-index: 10;
+  }
+  .map-btn {
+    padding: 5px 10px;
+    background: rgba(10,15,26,.85);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-dim);
+    font-size: 10px; font-family: var(--font-mono);
+    cursor: pointer; transition: all .2s;
+    white-space: nowrap;
+  }
+  .map-btn:hover, .map-btn.active {
+    background: rgba(0,200,255,.15);
+    border-color: var(--accent); color: var(--accent);
+  }
+  .map-source {
+    font-size: 10px; color: var(--text-dim);
+    padding: 6px 12px;
+    border-top: 1px solid var(--border);
+  }
+  .map-source a { color: var(--accent); text-decoration: none; }
+  .map-source a:hover { text-decoration: underline; }
+
+  /* ── 河川水位 ── */
+  .river-list { display: flex; flex-direction: column; gap: 8px; }
+  .river-item { }
+  .river-name {
+    display: flex; justify-content: space-between;
+    font-size: 12px; margin-bottom: 4px;
+  }
+  .river-name strong { color: var(--text); }
+  .river-val { font-family: var(--font-mono); }
+  .river-val.safe   { color: var(--safe); }
+  .river-val.watch  { color: var(--warn); }
+  .river-val.danger { color: var(--danger); }
+  .river-bar-bg {
+    width: 100%; height: 6px; background: var(--border);
+    border-radius: 3px; overflow: hidden;
+  }
+  .river-bar-fill {
+    height: 100%; border-radius: 3px;
+    transition: width .8s ease;
+  }
+  .river-bar-fill.safe   { background: linear-gradient(90deg, #00e676, #00c8ff); }
+  .river-bar-fill.watch  { background: linear-gradient(90deg, #ffb700, #ff8c00); }
+  .river-bar-fill.danger { background: linear-gradient(90deg, #ff3d3d, #ff0066); }
+  .river-thresholds {
+    display: flex; justify-content: flex-end; gap: 8px;
+    margin-top: 2px; font-size: 9px; color: var(--text-dim);
+  }
+
+  /* ── ライブカメラ ── */
+  .cam-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .cam-item { }
+  .cam-thumb {
+    width: 100%; aspect-ratio: 16/9;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    cursor: pointer;
+    transition: border-color .2s;
+    position: relative; overflow: hidden;
+  }
+  .cam-thumb:hover { border-color: var(--accent); }
+  .cam-thumb::after {
+    content: '▶ LIVE';
+    position: absolute; bottom: 4px; right: 6px;
+    font-family: var(--font-mono); font-size: 8px;
+    color: var(--danger);
+    background: rgba(0,0,0,.6); padding: 1px 4px; border-radius: 2px;
+  }
+  .cam-label { font-size: 10px; color: var(--text-dim); margin-top: 3px; }
+
+  /* ── 避難情報 ── */
+  .evac-list { display: flex; flex-direction: column; gap: 6px; }
+  .evac-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 10px; border-radius: 4px; font-size: 11px;
+    border: 1px solid var(--border);
+  }
+  .evac-level { font-family: var(--font-mono); font-size: 10px; min-width: 36px; }
+  .evac-name { flex: 1; }
+  .evac-cap { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); }
+  .evac-l1 { border-color: rgba(0,200,255,.2); background: rgba(0,200,255,.04); }
+  .evac-l1 .evac-level { color: var(--accent); }
+  .evac-l2 { border-color: rgba(255,183,0,.2); background: rgba(255,183,0,.04); }
+  .evac-l2 .evac-level { color: var(--warn); }
+
+  /* ── データソースリンク ── */
+  .source-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .source-link {
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 8px; border-radius: 4px;
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text-dim); font-size: 10px;
+    text-decoration: none; transition: all .2s;
+  }
+  .source-link:hover { border-color: var(--accent); color: var(--accent); }
+  .source-link .si { font-size: 14px; }
+
+  /* ── フッター ── */
+  footer {
+    position: relative; z-index: 1;
+    text-align: center; padding: 16px;
+    font-size: 10px; color: var(--text-dim);
+    border-top: 1px solid var(--border);
+    margin-top: 4px;
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+
+  /* ── レスポンシブ ── */
+  @media(max-width: 1100px){
+    .dashboard { grid-template-columns: 1fr 1fr; }
+    .map-panel { grid-column: 1 / -1; grid-row: auto; }
+    .alert-bar { grid-column: 1 / -1; }
+  }
+  @media(max-width: 640px){
+    .dashboard { grid-template-columns: 1fr; }
+    .cam-grid { grid-template-columns: 1fr 1fr; }
+  }
+
+  /* ── 更新アニメ ── */
+  .updating { animation: blink .4s ease 3; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+</style>
+</head>
+<body>
+
+<!-- ヘッダー -->
+<header>
+  <div class="logo">CHIBA<span>-MIDORI</span> BOUSAI</div>
+  <div style="font-size:11px;color:var(--text-dim);">千葉市緑区 防災情報ダッシュボード</div>
+  <div class="header-sep"></div>
+  <div class="status-dot" id="statusDot"></div>
+  <div class="status-label" id="statusLabel">データ取得中</div>
+  <div id="clock"></div>
+</header>
+
+<div class="dashboard">
+
+  <!-- アラートバナー -->
+  <div class="alert-bar safe" id="alertBar">
+    <div class="alert-icon">🟢</div>
+    <div class="alert-text">
+      <strong id="alertTitle">現在、緊急警報はありません</strong>
+      <span id="alertSub">最終確認: <span id="alertTime">--:--</span> ／ 次回更新まで <span id="countdown">60</span>秒</span>
+    </div>
+    <div style="margin-left:auto;font-family:var(--font-mono);font-size:10px;color:var(--text-dim);">
+      千葉県 / 千葉市緑区
+    </div>
+  </div>
+
+  <!-- 左列: 気象警報 -->
+  <div class="panel" style="animation-delay:.05s">
+    <div class="panel-header">
+      <span class="panel-icon">⚠️</span>
+      <span class="panel-title">気象警報・注意報</span>
+      <span class="panel-badge" id="warnBadge">気象庁</span>
+    </div>
+    <div class="panel-body">
+      <div class="warning-list" id="warningList">
+        <div class="warning-item clear">
+          <div class="wi-dot"></div>
+          <div class="wi-name">大雨警報</div>
+          <div class="wi-level">解除</div>
+        </div>
+        <div class="warning-item watch">
+          <div class="wi-dot"></div>
+          <div class="wi-name">洪水注意報</div>
+          <div class="wi-level">注意報</div>
+        </div>
+        <div class="warning-item clear">
+          <div class="wi-dot"></div>
+          <div class="wi-name">暴風警報</div>
+          <div class="wi-level">解除</div>
+        </div>
+        <div class="warning-item clear">
+          <div class="wi-dot"></div>
+          <div class="wi-name">土砂災害警戒</div>
+          <div class="wi-level">解除</div>
+        </div>
+        <div class="warning-item clear">
+          <div class="wi-dot"></div>
+          <div class="wi-name">高潮注意報</div>
+          <div class="wi-level">解除</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;font-size:10px;color:var(--text-dim);">
+        📡 出典: <a href="https://www.jma.go.jp/bosai/warning/" target="_blank" style="color:var(--accent);text-decoration:none;">気象庁 防災情報</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- 左列: 雨量 -->
+  <div class="panel" style="animation-delay:.1s">
+    <div class="panel-header">
+      <span class="panel-icon">🌧</span>
+      <span class="panel-title">降水量（千葉市緑区）</span>
+      <span class="panel-badge">mm/h</span>
+    </div>
+    <div class="panel-body">
+      <div style="display:flex;align-items:flex-end;gap:12px;margin-bottom:10px;">
+        <div class="rain-now" id="rainNow">3.2 <span>mm/h</span></div>
+        <div style="font-size:10px;color:var(--text-dim);padding-bottom:4px;">過去1時間累積: <span id="rainTotal" style="color:var(--accent);font-family:var(--font-mono);">8.5</span> mm</div>
+      </div>
+      <div class="rain-chart" id="rainChart"></div>
+      <div class="rain-meta">
+        <span>-6h</span><span>-5h</span><span>-4h</span><span>-3h</span><span>-2h</span><span>-1h</span><span>現在</span>
+      </div>
+      <div style="margin-top:8px;font-size:10px;color:var(--text-dim);">
+        📡 出典: <a href="https://www.river.go.jp/" target="_blank" style="color:var(--accent);text-decoration:none;">国交省 川の防災情報</a> /
+        <a href="https://www.jma.go.jp/bosai/kaikotan/" target="_blank" style="color:var(--accent);text-decoration:none;">気象庁アメダス</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- 中央: 地図パネル -->
+  <div class="panel map-panel">
+    <div class="panel-header">
+      <span class="panel-icon">🗺</span>
+      <span class="panel-title">ハザードマップ / 現況マップ</span>
+    </div>
+    <div style="position:relative;">
+      <div class="map-overlay">
+        <button class="map-btn active" onclick="setMap('hazard',this)">🌊 浸水想定</button>
+        <button class="map-btn" onclick="setMap('sediment',this)">⛰ 土砂災害</button>
+        <button class="map-btn" onclick="setMap('rain',this)">🌧 降水レーダー</button>
+        <button class="map-btn" onclick="setMap('evacuation',this)">🏫 避難場所</button>
+        <button class="map-btn" onclick="setMap('xrain',this)">📡 Xバンド雨量</button>
+      </div>
+      <div class="map-container">
+        <iframe id="mainMap"
+          src="https://disaportal.gsi.go.jp/maps/?ll=35.526,140.181&z=13&base=std&ls=flood_l2_shinsuishin_data,flood_l2_shinsuishin&d=fl"
+          title="国土地理院ハザードマップ 千葉市緑区"
+          allowfullscreen loading="lazy">
+        </iframe>
+      </div>
+    </div>
+    <div class="map-source">
+      📡 表示中: <span id="mapSourceLabel">国土地理院 ハザードマップポータル（浸水想定区域）</span>
+      ／ <a href="https://disaportal.gsi.go.jp/" target="_blank">別ウィンドウで開く</a>
+    </div>
+  </div>
+
+  <!-- 右列: 河川水位 -->
+  <div class="panel" style="animation-delay:.15s">
+    <div class="panel-header">
+      <span class="panel-icon">🌊</span>
+      <span class="panel-title">河川水位（主要観測点）</span>
+      <span class="panel-badge">国交省</span>
+    </div>
+    <div class="panel-body">
+      <div class="river-list" id="riverList">
+        <div class="river-item">
+          <div class="river-name">
+            <strong>都川（都川橋）</strong>
+            <span class="river-val safe" id="rv1">0.82m</span>
+          </div>
+          <div class="river-bar-bg"><div class="river-bar-fill safe" id="rb1" style="width:28%"></div></div>
+          <div class="river-thresholds"><span>注意 1.5m</span><span>危険 2.8m</span></div>
+        </div>
+        <div class="river-item">
+          <div class="river-name">
+            <strong>村田川（土気観測所）</strong>
+            <span class="river-val safe" id="rv2">0.45m</span>
+          </div>
+          <div class="river-bar-bg"><div class="river-bar-fill safe" id="rb2" style="width:18%"></div></div>
+          <div class="river-thresholds"><span>注意 1.2m</span><span>危険 2.4m</span></div>
+        </div>
+        <div class="river-item">
+          <div class="river-name">
+            <strong>鹿島川（鎌取観測所）</strong>
+            <span class="river-val watch" id="rv3">1.34m</span>
+          </div>
+          <div class="river-bar-bg"><div class="river-bar-fill watch" id="rb3" style="width:55%"></div></div>
+          <div class="river-thresholds"><span>注意 1.0m</span><span>危険 2.2m</span></div>
+        </div>
+      </div>
+      <div style="margin-top:10px;font-size:10px;color:var(--text-dim);">
+        📡 <a href="https://www.river.go.jp/" target="_blank" style="color:var(--accent);text-decoration:none;">川の防災情報 (river.go.jp)</a> を参照
+      </div>
+    </div>
+  </div>
+
+  <!-- 右列: ライブカメラ -->
+  <div class="panel" style="animation-delay:.2s">
+    <div class="panel-header">
+      <span class="panel-icon">📷</span>
+      <span class="panel-title">ライブカメラ</span>
+      <span class="panel-badge">国交省</span>
+    </div>
+    <div class="panel-body">
+      <div class="cam-grid">
+        <div>
+          <div class="cam-thumb" onclick="openCam('https://www.river.go.jp/kawabou/pc/camPhoto?ob=16007540040010&ib=1')">🎥</div>
+          <div class="cam-label">都川（橋）</div>
+        </div>
+        <div>
+          <div class="cam-thumb" onclick="openCam('https://www.river.go.jp/kawabou/pc/camPhoto?ob=16007540040020&ib=1')">🎥</div>
+          <div class="cam-label">村田川（上流）</div>
+        </div>
+        <div>
+          <div class="cam-thumb" onclick="openCam('https://www.city.chiba.jp/somu/kikikanri/shoubou/index.html')">🎥</div>
+          <div class="cam-label">鹿島川</div>
+        </div>
+        <div>
+          <div class="cam-thumb" onclick="openCam('https://www.nhk.or.jp/kishou-saigai/city/live/')">🎥</div>
+          <div class="cam-label">NHK 千葉</div>
+        </div>
+      </div>
+      <div style="margin-top:8px;font-size:10px;color:var(--text-dim);">
+        ▶ クリックすると外部カメラページを開きます
+      </div>
+    </div>
+  </div>
+
+  <!-- 左下: 避難所情報 -->
+  <div class="panel" style="animation-delay:.25s">
+    <div class="panel-header">
+      <span class="panel-icon">🏫</span>
+      <span class="panel-title">避難所（開設状況）</span>
+      <span class="panel-badge">千葉市</span>
+    </div>
+    <div class="panel-body">
+      <div class="evac-list">
+        <div class="evac-item evac-l1">
+          <div class="evac-level">LV1</div>
+          <div class="evac-name">土気小学校</div>
+          <div class="evac-cap">開設待機</div>
+        </div>
+        <div class="evac-item evac-l1">
+          <div class="evac-level">LV1</div>
+          <div class="evac-name">あすみが丘小学校</div>
+          <div class="evac-cap">開設待機</div>
+        </div>
+        <div class="evac-item evac-l2">
+          <div class="evac-level">LV2</div>
+          <div class="evac-name">鎌取コミュニティ</div>
+          <div class="evac-cap">— 収容: 300名</div>
+        </div>
+        <div class="evac-item evac-l1">
+          <div class="evac-level">LV1</div>
+          <div class="evac-name">緑区役所</div>
+          <div class="evac-cap">— 収容: 150名</div>
+        </div>
+      </div>
+      <div style="margin-top:8px;font-size:10px;color:var(--text-dim);">
+        📡 <a href="https://www.city.chiba.jp/somu/kikikanri/bousai/hinanjo.html" target="_blank" style="color:var(--accent);text-decoration:none;">千葉市 避難所一覧</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右下: データソース一覧 -->
+  <div class="panel" style="animation-delay:.3s">
+    <div class="panel-header">
+      <span class="panel-icon">🔗</span>
+      <span class="panel-title">データソース / 外部リンク</span>
+    </div>
+    <div class="panel-body">
+      <div class="source-grid">
+        <a class="source-link" href="https://www.jma.go.jp/bosai/warning/#area_type=class20s&area_code=120010" target="_blank">
+          <span class="si">⛅</span>気象庁 警報
+        </a>
+        <a class="source-link" href="https://www.river.go.jp/kawabou/sp/suiiIndex?rd=12&wd=1" target="_blank">
+          <span class="si">🌊</span>川の防災情報
+        </a>
+        <a class="source-link" href="https://disaportal.gsi.go.jp/" target="_blank">
+          <span class="si">🗺</span>ハザードマップ
+        </a>
+        <a class="source-link" href="https://www.city.chiba.jp/somu/kikikanri/bousai/" target="_blank">
+          <span class="si">🏙</span>千葉市防災
+        </a>
+        <a class="source-link" href="https://www.jma.go.jp/bosai/kaikotan/" target="_blank">
+          <span class="si">📡</span>アメダス
+        </a>
+        <a class="source-link" href="https://www.pref.chiba.lg.jp/bousai/" target="_blank">
+          <span class="si">🏛</span>千葉県防災
+        </a>
+        <a class="source-link" href="https://www.river.go.jp/kawabou/pc/camPhoto?ob=16007540040010" target="_blank">
+          <span class="si">📷</span>河川カメラ
+        </a>
+        <a class="source-link" href="https://www.nhk.or.jp/kishou-saigai/" target="_blank">
+          <span class="si">📺</span>NHK 気象・災害
+        </a>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  ⚠️ 本ページはデモ用サンプルです。実際の避難判断には必ず公式情報（気象庁・千葉市）をご確認ください。<br>
+  データソース: <a href="https://www.jma.go.jp/" target="_blank">気象庁</a> /
+  <a href="https://www.river.go.jp/" target="_blank">国土交通省 川の防災情報</a> /
+  <a href="https://disaportal.gsi.go.jp/" target="_blank">国土地理院</a> /
+  <a href="https://www.city.chiba.jp/" target="_blank">千葉市</a>
+</footer>
+
+<script>
+// ── 時計 ──
+function updateClock(){
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleDateString('ja-JP',{month:'2-digit',day:'2-digit'}) + ' ' +
+    now.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── 地図切替 ──
+const mapSources = {
+  hazard: {
+    url: 'https://disaportal.gsi.go.jp/maps/?ll=35.526,140.181&z=13&base=std&ls=flood_l2_shinsuishin_data,flood_l2_shinsuishin&d=fl',
+    label: '国土地理院 ハザードマップポータル（浸水想定区域）'
+  },
+  sediment: {
+    url: 'https://disaportal.gsi.go.jp/maps/?ll=35.526,140.181&z=13&base=std&ls=dosekiryu,kyukeisha,jisuberi&d=sl',
+    label: '国土地理院 ハザードマップポータル（土砂災害警戒区域）'
+  },
+  rain: {
+    url: 'https://www.jma.go.jp/bosai/nowc/#zoom:10/lat:35.526/lon:140.181/colordepth:normal/elements:hrpns',
+    label: '気象庁 高解像度降水ナウキャスト'
+  },
+  evacuation: {
+    url: 'https://disaportal.gsi.go.jp/maps/?ll=35.526,140.181&z=13&base=std&ls=hinanbasho&d=el',
+    label: '国土地理院 避難場所マップ'
+  },
+  xrain: {
+    url: 'https://www.river.go.jp/kawabou/pc/rn?ope=dl&fld=0&rd=12&tm=60&bl=1&st=1&map=1&lc=1&scale=&bsn=&ext=0&btnAction=display&zoom=9&clat=35.526&clon=140.181&leg=1',
+    label: '国土交通省 Xバンドレーダー雨量'
+  }
+};
+function setMap(key, btn){
+  document.querySelectorAll('.map-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('mainMap').src = mapSources[key].url;
+  document.getElementById('mapSourceLabel').textContent = mapSources[key].label;
+}
+
+// ── カメラを別ウィンドウで開く ──
+function openCam(url){
+  window.open(url, '_blank', 'width=900,height=600');
+}
+
+// ── 雨量バーチャートの描画 ──
+const rainData = [1.2, 0.8, 2.1, 4.5, 6.8, 5.2, 3.2];
+function buildRainChart(){
+  const chart = document.getElementById('rainChart');
+  chart.innerHTML = '';
+  const max = Math.max(...rainData, 10);
+  rainData.forEach((v, i) => {
+    const pct = Math.round((v / max) * 100);
+    let cls = 'low';
+    if(v >= 10) cls = 'danger';
+    else if(v >= 5) cls = 'high';
+    else if(v >= 2) cls = 'mid';
+    const wrap = document.createElement('div');
+    wrap.className = 'rain-bar-wrap';
+    wrap.innerHTML = `
+      <div class="rain-bar ${cls}" style="height:${pct}%"></div>
+      <div class="rain-label">${v}</div>
+    `;
+    chart.appendChild(wrap);
+  });
+}
+buildRainChart();
+
+// ── カウントダウン & 擬似データ更新 ──
+let countdown = 60;
+let alertTime = new Date();
+function updateAlertTime(){
+  alertTime = new Date();
+  document.getElementById('alertTime').textContent =
+    alertTime.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
+}
+updateAlertTime();
+
+setInterval(()=>{
+  countdown--;
+  document.getElementById('countdown').textContent = countdown;
+  if(countdown <= 0){
+    countdown = 60;
+    refreshData();
+  }
+}, 1000);
+
+// ── 擬似データ更新（実際はAPIコールに差し替え） ──
+function refreshData(){
+  updateAlertTime();
+  document.getElementById('alertTime').closest('.panel-body') ||
+    document.getElementById('alertBar').classList.add('updating');
+  setTimeout(()=>document.getElementById('alertBar').classList.remove('updating'), 600);
+
+  // 雨量を微変動させてリアル感を出す
+  const last = rainData[rainData.length - 1];
+  rainData.shift();
+  rainData.push(Math.max(0, last + (Math.random() - 0.5) * 1.5));
+  document.getElementById('rainNow').innerHTML =
+    rainData[rainData.length-1].toFixed(1) + ' <span>mm/h</span>';
+  buildRainChart();
+
+  // 河川水位も微変動
+  const rvals = [
+    {id:'rv1', rb:'rb1', base:0.82, max:2.8},
+    {id:'rv2', rb:'rb2', base:0.45, max:2.4},
+    {id:'rv3', rb:'rb3', base:1.34, max:2.2}
+  ];
+  rvals.forEach(r => {
+    const delta = (Math.random() - 0.48) * 0.04;
+    const el = document.getElementById(r.id);
+    const cur = parseFloat(el.textContent) + delta;
+    const clamped = Math.max(0.1, Math.min(r.max * .98, cur));
+    el.textContent = clamped.toFixed(2) + 'm';
+    const pct = (clamped / r.max * 100).toFixed(0);
+    const bar = document.getElementById(r.rb);
+    bar.style.width = pct + '%';
+    const cls = clamped > r.max * .7 ? 'danger' : clamped > r.max * .4 ? 'watch' : 'safe';
+    el.className = 'river-val ' + cls;
+    bar.className = 'river-bar-fill ' + cls;
+  });
+
+  document.getElementById('statusLabel').textContent = '更新完了';
+  setTimeout(()=>document.getElementById('statusLabel').textContent = 'ライブ', 2000);
+}
+
+// ── 初期ステータス ──
+setTimeout(()=>{
+  document.getElementById('statusLabel').textContent = 'ライブ';
+}, 800);
+</script>
+</body>
+</html>
